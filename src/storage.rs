@@ -67,10 +67,9 @@ pub fn extract_jobs(req: &ExportTraceServiceRequest) -> Vec<UploadJob> {
     };
 
     let path = format!(
-        "{}/{}/{}-{}/{}-{}.json",
+        "{}/users/{}/sessions/{}/{}-{}.json",
         date_str,
         sanitize(user_id),
-        unix_str,
         sanitize(session_id),
         unix_str,
         sanitize(&trace_label),
@@ -174,7 +173,7 @@ mod tests {
         let jobs = extract_jobs(&req);
         assert_eq!(jobs.len(), 1);
         let path = &jobs[0].path;
-        assert!(path.starts_with("2023-11-14/user-42/1700000000-sess-1/1700000000-abc123.json"));
+        assert!(path.starts_with("2023-11-14/users/user-42/sessions/sess-1/1700000000-abc123.json"));
     }
 
     #[test]
