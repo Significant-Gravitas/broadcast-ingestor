@@ -1,0 +1,67 @@
+name: Trace Ingestor - Build and Push to Dev
+run-name: Build `${{ github.event.inputs.git_ref || github.sha }}` for Dev
+
+concurrency:
+  group: build-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "Git ref (branch/tag) to build"
+        required: false
+        default: "dev"
+        type: string
+
+permissions:
+  contents: "read"
+  id-token: "write"
+
+env:
+  IMAGE_NAME: trace-ingestor-dev
+  GAR_REGISTRY: us-east1-docker.pkg.dev
+  GAR_PROJECT: agpt-dev
+  GAR_REPOSITORY: trace-ingestor-dev
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref || github.ref }}
+
+      - name: Get short SHA
+        id: sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - id: "auth"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/638488734936/locations/global/workloadIdentityPools/dev-pool/providers/github"
+          service_account: "dev-github-actions-sa@agpt-dev.iam.gserviceaccount.com"
+          token_format: "access_token"
+          create_credentials_file: true
+
+      - name: "Configure Docker"
+        run: gcloud auth configure-docker us-east1-docker.pkg.dev
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.GAR_REGISTRY }}/${{ env.GAR_PROJECT }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.sha }}
+            ${{ env.GAR_REGISTRY }}/${{ env.GAR_PROJECT }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha,scope=trace-ingestor-dev
+          cache-to: type=gha,scope=trace-ingestor-dev,mode=max

@@ -1,0 +1,33 @@
+[package]
+name = "trace-ingestor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+object_store = { version = "0.13", features = ["gcp"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+uuid = { version = "1", features = ["v4"] }
+bytes = "1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+
+# --------------------------- build profiles ---------------------------------
+[profile.release]
+opt-level     = 3
+lto           = "fat"
+codegen-units = 1
+strip         = true
+panic         = "abort"
+
+# --------------------------- workspace lints --------------------------------
+[workspace.lints.rust]
+warnings       = "deny"
+unused_imports = "deny"
+unsafe_code    = "forbid"
