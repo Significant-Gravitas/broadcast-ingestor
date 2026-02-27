@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 use config::Config;
 use models::ExportTraceServiceRequest;
 use retry::RetryQueue;
-use storage::{extract_jobs, UploadJob};
+use storage::{extract_jobs, parse_error_job, UploadJob};
 use worker::{flush_retry_queue, run_retry_task};
 
 struct AppState {
@@ -190,7 +190,19 @@ async fn ingest_traces(
     let req: ExportTraceServiceRequest = match serde_json::from_slice(&body) {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!(error = %e, "invalid JSON payload");
+            tracing::warn!(error = %e, "invalid JSON payload, writing raw body to errors/");
+            let job = parse_error_job(body);
+            match state.tx.try_send(job) {
+                Ok(_) => {}
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    tracing::warn!("channel full, failed to queue parse error payload");
+                    return StatusCode::SERVICE_UNAVAILABLE;
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    tracing::error!("channel closed unexpectedly");
+                    return StatusCode::INTERNAL_SERVER_ERROR;
+                }
+            }
             return StatusCode::BAD_REQUEST;
         }
     };
@@ -318,7 +330,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_json_returns_400() {
-        let (app, _rx) = test_app();
+        let (app, mut rx) = test_app();
         let req = Request::builder()
             .method("POST")
             .uri("/v1/traces")
@@ -328,6 +340,11 @@ mod tests {
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        let job = rx.recv().await.expect("expected parse error job to be queued");
+        assert!(job.path.starts_with("errors/"));
+        assert!(job.path.ends_with(".json"));
+        assert_eq!(job.data.as_ref(), b"not json");
     }
 
     #[tokio::test]

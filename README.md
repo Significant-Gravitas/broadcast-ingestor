@@ -28,6 +28,12 @@ Fields are extracted from the first OTLP span:
 | session-id | `session.id` attribute | `no_session` |
 | trace-id | `traceId` | random UUID |
 
+If JSON deserialization fails, the raw request body is still queued to GCS at:
+
+```
+errors/<unix-nanoseconds>.json
+```
+
 ## Configuration
 
 All configuration is via environment variables.
@@ -62,7 +68,7 @@ Accepts OTLP JSON trace payloads.
 
 - `200` - Test connection acknowledged
 - `202` - Trace accepted and queued
-- `400` - Invalid JSON
+- `400` - Invalid JSON (raw payload is queued to `errors/<timestamp>.json`)
 - `401` - Missing or invalid bearer token
 - `503` - Backpressure (channel full)
 

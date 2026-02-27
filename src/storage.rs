@@ -24,6 +24,15 @@ pub struct UploadJob {
     pub session_id: String,
 }
 
+/// Build an upload job for payloads that fail request deserialization.
+pub fn parse_error_job(raw_body: Bytes) -> UploadJob {
+    UploadJob {
+        path: format!("errors/{}.json", now_nanos()),
+        data: raw_body,
+        session_id: "parse_error".to_string(),
+    }
+}
+
 /// Extract all upload jobs from an OTLP request.
 pub fn extract_jobs(req: &ExportTraceServiceRequest) -> Vec<UploadJob> {
     let raw = serde_json::to_vec(req).unwrap_or_default();
@@ -125,6 +134,13 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
+fn now_nanos() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+}
+
 /// Replace path-unsafe characters.
 fn sanitize(s: &str) -> String {
     s.chars()
@@ -195,5 +211,16 @@ mod tests {
         let jobs = extract_jobs(&req);
         assert_eq!(jobs.len(), 1);
         assert!(jobs[0].path.contains("unknown_user"));
+    }
+
+    #[test]
+    fn test_parse_error_job() {
+        let payload = Bytes::from_static(b"not json");
+        let job = parse_error_job(payload.clone());
+
+        assert!(job.path.starts_with("errors/"));
+        assert!(job.path.ends_with(".json"));
+        assert_eq!(job.data, payload);
+        assert_eq!(job.session_id, "parse_error");
     }
 }
